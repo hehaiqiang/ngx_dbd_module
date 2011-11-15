@@ -1,0 +1,12 @@
+
+# Copyright (C) Ngwsx
+
+
+if [ "$NGX_PLATFORM" != win32 ]; then
+    FREETDS_INCS=""
+    FREETDS_LIBS=""
+else
+    FREETDS="$ngx_addon_dir/../../../lib/mssql"
+    FREETDS_INCS="$FREETDS/incs"
+    FREETDS_LIBS="$FREETDS/libs/ntwdblib.lib"
+fi

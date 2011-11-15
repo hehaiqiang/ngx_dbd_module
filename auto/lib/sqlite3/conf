@@ -1,0 +1,13 @@
+
+# Copyright (C) Ngwsx
+
+
+SQLITE3="$ngx_addon_dir/../../../lib/sqlite3"
+
+if [ "$NGX_PLATFORM" != win32 ]; then
+    SQLITE3_LIBS="-L$SQLITE3/libs/unix -lsqlite3 -ldl"
+else
+    SQLITE3_LIBS="$SQLITE3/libs/win32/libsqlite3.lib"
+fi
+
+SQLITE3_INCS="$SQLITE3/incs"

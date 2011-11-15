@@ -1,0 +1,14 @@
+
+# Copyright (C) Ngwsx
+
+
+LIBDRIZZLE="$ngx_addon_dir/../../../lib/libdrizzle"
+
+LIBDRIZZLE_INCS="$LIBDRIZZLE/incs"
+
+if [ "$NGX_PLATFORM" != win32 ]; then
+    LIBDRIZZLE_LIBS="-L$LIBDRIZZLE/libs/unix -ldrizzle"
+else
+    LIBDRIZZLE_LIBS="$LIBDRIZZLE/libs/win32/libdrizzle.lib"
+    LIBDRIZZLE_INCS="$LIBDRIZZLE_INCS $LIBDRIZZLE_INCS/libdrizzle/win32"
+fi

@@ -1,0 +1,93 @@
+
+# Copyright (C) Ngwsx
+
+
+ngx_addon_name=ngx_dbd_module
+
+
+NGX_DBD_DB2=NO
+NGX_DBD_FREETDS=YES
+NGX_DBD_LIBDRIZZLE=YES
+NGX_DBD_MYSQL=NO
+NGX_DBD_ORACLE=NO
+NGX_DBD_PGSQL=NO
+NGX_DBD_SQLITE2=NO
+NGX_DBD_SQLITE3=YES
+
+
+CORE_INCS="$CORE_INCS \
+    $ngx_addon_dir/src"
+
+HTTP_MODULES="$HTTP_MODULES \
+    ngx_http_dbd_module"
+
+NGX_ADDON_DEPS="$NGX_ADDON_DEPS \
+    $ngx_addon_dir/src/ngx_dbd.h"
+
+NGX_ADDON_SRCS="$NGX_ADDON_SRCS \
+    $ngx_addon_dir/src/ngx_dbd.c \
+    $ngx_addon_dir/src/ngx_http_dbd_module.c"
+
+
+if [ $NGX_DBD_DB2 = YES ]; then
+    NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/src/ngx_dbd_db2.c"
+
+    have=NGX_DBD_DB2 . auto/have
+fi
+
+if [ $NGX_DBD_FREETDS = YES ]; then
+    . $ngx_addon_dir/auto/lib/freetds/conf
+
+    CORE_INCS="$CORE_INCS $FREETDS_INCS"
+    CORE_LIBS="$CORE_LIBS $FREETDS_LIBS"
+
+    NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/src/ngx_dbd_freetds.c"
+
+    have=NGX_DBD_FREETDS . auto/have
+fi
+
+if [ $NGX_DBD_LIBDRIZZLE = YES ]; then
+    . $ngx_addon_dir/auto/lib/libdrizzle/conf
+
+    CORE_INCS="$CORE_INCS $LIBDRIZZLE_INCS"
+    CORE_LIBS="$CORE_LIBS $LIBDRIZZLE_LIBS"
+
+    NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/src/ngx_dbd_libdrizzle.c"
+
+    have=NGX_DBD_LIBDRIZZLE . auto/have
+fi
+
+if [ $NGX_DBD_MYSQL = YES ]; then
+    NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/src/ngx_dbd_mysql.c"
+
+    have=NGX_DBD_MYSQL . auto/have
+fi
+
+if [ $NGX_DBD_ORACLE = YES ]; then
+    NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/src/ngx_dbd_oracle.c"
+
+    have=NGX_DBD_ORACLE . auto/have
+fi
+
+if [ $NGX_DBD_PGSQL = YES ]; then
+    NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/src/ngx_dbd_pgsql.c"
+
+    have=NGX_DBD_PGSQL . auto/have
+fi
+
+if [ $NGX_DBD_SQLITE2 = YES ]; then
+    NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/src/ngx_dbd_sqlite2.c"
+
+    have=NGX_DBD_SQLITE2 . auto/have
+fi
+
+if [ $NGX_DBD_SQLITE3 = YES ]; then
+    . $ngx_addon_dir/auto/lib/sqlite3/conf
+
+    CORE_INCS="$CORE_INCS $SQLITE3_INCS"
+    CORE_LIBS="$CORE_LIBS $SQLITE3_LIBS"
+
+    NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/src/ngx_dbd_sqlite3.c"
+
+    have=NGX_DBD_SQLITE3 . auto/have
+fi
