@@ -16,3 +16,5 @@ cp -fr conf/nginx-win32.conf ./build/conf/nginx.conf
 cp -fr conf/mime.types ./build/conf
 
 cp -fr html/*.html ./build/html
+
+cp -fr ../../../lib/mssql/libs/ntwdblib.dll ./build
