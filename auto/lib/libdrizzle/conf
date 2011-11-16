@@ -4,11 +4,12 @@
 
 LIBDRIZZLE="$ngx_addon_dir/../../../lib/libdrizzle"
 
-LIBDRIZZLE_INCS="$LIBDRIZZLE/incs"
-
 if [ "$NGX_PLATFORM" != win32 ]; then
     LIBDRIZZLE_LIBS="-L$LIBDRIZZLE/libs/unix -ldrizzle"
+    LIBDRIZZLE_INCS="$LIBDRIZZLE/incs/unix"
 else
     LIBDRIZZLE_LIBS="$LIBDRIZZLE/libs/win32/libdrizzle.lib"
-    LIBDRIZZLE_INCS="$LIBDRIZZLE_INCS $LIBDRIZZLE_INCS/libdrizzle/win32"
+    LIBDRIZZLE_INCS=" \
+        $LIBDRIZZLE/incs/win32 \
+        $LIBDRIZZLE/incs/win32/libdrizzle/win32"
 fi

@@ -18,14 +18,21 @@
 
 
 typedef struct {
-    drizzle_st                dri;
-    drizzle_con_st            con;
-    drizzle_result_st         res;
-    drizzle_column_st         col;
+    drizzle_st               *dri;
+
+    drizzle_con_st           *con;
     ngx_peer_connection_t     pc;
     ngx_uint_t                connected;
+
+    drizzle_result_st        *res;
+    ngx_uint_t                res_done;
+
+    drizzle_column_st        *col;
+    ngx_uint_t                col_done;
+
     u_char                   *sql;
     size_t                    sql_len;
+
     ngx_err_t                 error_code;
     u_char                   *error;
 } ngx_dbd_libdrizzle_ctx_t;
@@ -149,6 +156,8 @@ ngx_dbd_libdrizzle_create(ngx_pool_t *pool, ngx_log_t *log)
 
     ngx_log_debug0(NGX_LOG_DEBUG_MYSQL, log, 0, "dbd libdrizzle create");
 
+    /* drizzle_version */
+
     dbd = ngx_pcalloc(pool, sizeof(ngx_dbd_t));
     if (dbd == NULL) {
         return NULL;
@@ -159,24 +168,24 @@ ngx_dbd_libdrizzle_create(ngx_pool_t *pool, ngx_log_t *log)
         return NULL;
     }
 
-    if (drizzle_create(&ctx->dri) == NULL) {
+    ctx->dri = drizzle_create(NULL);
+    if (ctx->dri == NULL) {
         ngx_log_error(NGX_LOG_ALERT, log, ngx_errno, "drizzle_create() failed");
         return NULL;
     }
 
-#if 0
-    drizzle_set_timeout(&ctx->dri, 0);
-#endif
+    /* drizzle_set_timeout(&ctx->dri, 0); */
 
-    if (drizzle_con_create(&ctx->dri, &ctx->con) == NULL) {
+    ctx->con = drizzle_con_create(ctx->dri, NULL);
+    if (ctx->con == NULL) {
         ngx_log_error(NGX_LOG_ALERT, log, ngx_errno,
                       "drizzle_con_create() failed");
-        drizzle_free(&ctx->dri);
+        drizzle_free(ctx->dri);
         return NULL;
     }
 
-    drizzle_con_set_context(&ctx->con, dbd);
-    drizzle_con_add_options(&ctx->con, DRIZZLE_CON_MYSQL);
+    drizzle_con_set_context(ctx->con, dbd);
+    drizzle_con_add_options(ctx->con, DRIZZLE_CON_MYSQL);
 
     pc = &ctx->pc;
     pc->log = log;
@@ -203,8 +212,12 @@ ngx_dbd_libdrizzle_destroy(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    drizzle_con_free(&ctx->con);
-    drizzle_free(&ctx->dri);
+    if (ctx->pc.connection != NULL || ctx->connected) {
+        ngx_dbd_libdrizzle_close(dbd);
+    }
+
+    drizzle_con_free(ctx->con);
+    drizzle_free(ctx->dri);
 }
 
 
@@ -219,7 +232,7 @@ ngx_dbd_libdrizzle_set_options(ngx_dbd_t *dbd, int opts)
     ctx = dbd->ctx;
 
     if (opts & NGX_DBD_OPT_NON_BLOCKING) {
-        drizzle_set_options(&ctx->dri, DRIZZLE_NON_BLOCKING);
+        drizzle_set_options(ctx->dri, DRIZZLE_NON_BLOCKING);
     }
 
     dbd->opts = opts;
@@ -257,7 +270,7 @@ ngx_dbd_libdrizzle_error(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return (u_char *) drizzle_error(&ctx->dri);
+    return (u_char *) drizzle_error(ctx->dri);
 }
 
 
@@ -271,7 +284,7 @@ ngx_dbd_libdrizzle_error_code(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return drizzle_error_code(&ctx->dri);
+    return drizzle_error_code(ctx->dri);
 }
 
 
@@ -347,7 +360,7 @@ ngx_dbd_libdrizzle_set_tcp(ngx_dbd_t *dbd, u_char *host, in_port_t port)
 
     ctx = dbd->ctx;
 
-    drizzle_con_set_tcp(&ctx->con, (const char *) host, port);
+    drizzle_con_set_tcp(ctx->con, (const char *) host, port);
 
     return NGX_OK;
 }
@@ -362,7 +375,7 @@ ngx_dbd_libdrizzle_set_uds(ngx_dbd_t *dbd, u_char *uds)
 
     ctx = dbd->ctx;
 
-    drizzle_con_set_uds(&ctx->con, (const char *) uds);
+    drizzle_con_set_uds(ctx->con, (const char *) uds);
 
     return NGX_OK;
 }
@@ -377,7 +390,7 @@ ngx_dbd_libdrizzle_set_auth(ngx_dbd_t *dbd, u_char *user, u_char *passwd)
 
     ctx = dbd->ctx;
 
-    drizzle_con_set_auth(&ctx->con, (const char *) user, (const char *) passwd);
+    drizzle_con_set_auth(ctx->con, (const char *) user, (const char *) passwd);
 
     return NGX_OK;
 }
@@ -392,7 +405,7 @@ ngx_dbd_libdrizzle_set_db(ngx_dbd_t *dbd, u_char *db)
 
     ctx = dbd->ctx;
 
-    drizzle_con_set_db(&ctx->con, (const char *) db);
+    drizzle_con_set_db(ctx->con, (const char *) db);
 
     return NGX_OK;
 }
@@ -412,13 +425,13 @@ ngx_dbd_libdrizzle_connect(ngx_dbd_t *dbd)
         return NGX_OK;
     }
 
-    rv = drizzle_con_connect(&ctx->con);
+    rv = drizzle_con_connect(ctx->con);
 
     if (rv != DRIZZLE_RETURN_OK && rv != DRIZZLE_RETURN_IO_WAIT) {
         ngx_log_error(NGX_LOG_ALERT, dbd->log, 0,
                       "drizzle_con_connect() failed (%d: %s)",
-                      drizzle_con_error_code(&ctx->con),
-                      drizzle_con_error(&ctx->con));
+                      drizzle_con_error_code(ctx->con),
+                      drizzle_con_error(ctx->con));
         return NGX_ERROR;
     }
 
@@ -433,7 +446,7 @@ ngx_dbd_libdrizzle_connect(ngx_dbd_t *dbd)
     c = ctx->pc.connection;
 
     if ((dbd->opts & NGX_DBD_OPT_NON_BLOCKING) && c == NULL) {
-        fd = drizzle_con_fd(&ctx->con);
+        fd = drizzle_con_fd(ctx->con);
         if (fd == -1) {
             ngx_log_error(NGX_LOG_ALERT, dbd->log, ngx_errno,
                           "drizzle_con_fd() failed (%d: %s)",
@@ -520,6 +533,14 @@ ngx_dbd_libdrizzle_connect(ngx_dbd_t *dbd)
 
     ctx->connected = 1;
 
+    /* drizzle_con_protocol_version */
+    /* drizzle_con_server_version */
+    /* drizzle_con_server_version_number */
+    /* drizzle_con_thread_id */
+    /* drizzle_con_scramble */
+    /* drizzle_con_capabilities */
+    /* drizzle_con_charset */
+
     return NGX_OK;
 }
 
@@ -539,14 +560,12 @@ ngx_dbd_libdrizzle_close(ngx_dbd_t *dbd)
     }
 
     if (ctx->connected) {
-#if 0
-        drizzle_column_free(&ctx->col);
-#else
-        ctx->res.column_list = NULL;
-#endif
+        if (ctx->col != NULL) {
+            drizzle_column_free(ctx->col);
+        }
 
-        drizzle_result_free(&ctx->res);
-        drizzle_con_close(&ctx->con);
+        drizzle_result_free(ctx->res);
+        drizzle_con_close(ctx->con);
 
         ctx->connected = 0;
     }
@@ -562,18 +581,6 @@ ngx_dbd_libdrizzle_set_sql(ngx_dbd_t *dbd, u_char *sql, size_t len)
     ngx_log_debug0(NGX_LOG_DEBUG_MYSQL, dbd->log, 0, "dbd libdrizzle set sql");
 
     ctx = dbd->ctx;
-
-    /* TODO */
-
-    drizzle_result_free(&ctx->res);
-
-#if 0
-    if (drizzle_result_create(&ctx->con, &ctx->res) == NULL) {
-        ngx_log_error(NGX_LOG_ALERT, dbd->log, ngx_errno,
-                      "drizzle_result_create() failed");
-        return NGX_ERROR;
-    }
-#endif
 
     str.len = len;
     str.data = sql;
@@ -596,30 +603,29 @@ ngx_dbd_libdrizzle_query(ngx_dbd_t *dbd)
     ctx = dbd->ctx;
     rv = DRIZZLE_RETURN_OK;
 
-    drizzle_query(&ctx->con, &ctx->res, (const char *) ctx->sql, ctx->sql_len,
-                  &rv);
+    if (ctx->res != NULL && ctx->res_done) {
+        drizzle_result_free(ctx->res);
+    }
+
+    ctx->res = drizzle_query(ctx->con, NULL, (const char *) ctx->sql,
+                             ctx->sql_len, &rv);
 
     if (rv == DRIZZLE_RETURN_IO_WAIT) {
+        ctx->res_done = 0;
         return NGX_AGAIN;
     }
 
     if (rv != DRIZZLE_RETURN_OK) {
         ngx_log_error(NGX_LOG_ALERT, dbd->log, 0,
                       "drizzle_query() failed (%d: %s)",
-                      drizzle_result_error_code(&ctx->res),
-                      drizzle_result_error(&ctx->res));
+                      drizzle_result_error_code(ctx->res),
+                      drizzle_result_error(ctx->res));
         return NGX_ERROR;
     }
 
     /* rv == DRIZZLE_RETURN_OK */
 
-#if 0
-    if (drizzle_column_create(&ctx->res, &ctx->col) == NULL) {
-        ngx_log_error(NGX_LOG_ALERT, dbd->log, ngx_errno,
-                      "drizzle_column_create() failed");
-        return NGX_ERROR;
-    }
-#endif
+    ctx->res_done = 1;
 
     return NGX_OK;
 }
@@ -631,7 +637,7 @@ ngx_dbd_libdrizzle_result_buffer(ngx_dbd_t *dbd)
     ngx_log_debug0(NGX_LOG_DEBUG_MYSQL, dbd->log, 0,
                    "dbd libdrizzle result buffer");
 
-    /* TODO: */
+    /* drizzle_result_buffer */
 
     return NGX_DECLINED;
 }
@@ -647,7 +653,7 @@ ngx_dbd_libdrizzle_result_warning_count(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return drizzle_result_warning_count(&ctx->res);
+    return drizzle_result_warning_count(ctx->res);
 }
 
 
@@ -661,7 +667,7 @@ ngx_dbd_libdrizzle_result_insert_id(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return drizzle_result_insert_id(&ctx->res);
+    return drizzle_result_insert_id(ctx->res);
 }
 
 
@@ -675,7 +681,7 @@ ngx_dbd_libdrizzle_result_affected_rows(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return drizzle_result_affected_rows(&ctx->res);
+    return drizzle_result_affected_rows(ctx->res);
 }
 
 
@@ -689,7 +695,7 @@ ngx_dbd_libdrizzle_result_column_count(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return drizzle_result_column_count(&ctx->res);
+    return drizzle_result_column_count(ctx->res);
 }
 
 
@@ -703,7 +709,7 @@ ngx_dbd_libdrizzle_result_row_count(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return drizzle_result_row_count(&ctx->res);
+    return drizzle_result_row_count(ctx->res);
 }
 
 
@@ -713,7 +719,7 @@ ngx_dbd_libdrizzle_column_skip(ngx_dbd_t *dbd)
     ngx_log_debug0(NGX_LOG_DEBUG_MYSQL, dbd->log, 0,
                    "dbd libdrizzle column skip");
 
-    /* TODO: */
+    /* drizzle_column_skip */
 
     return NGX_DECLINED;
 }
@@ -725,7 +731,7 @@ ngx_dbd_libdrizzle_column_buffer(ngx_dbd_t *dbd)
     ngx_log_debug0(NGX_LOG_DEBUG_MYSQL, dbd->log, 0,
                    "dbd libdrizzle column buffer");
 
-    /* TODO: */
+    /* drizzle_column_buffer */
 
     return NGX_DECLINED;
 }
@@ -735,7 +741,6 @@ static ngx_int_t
 ngx_dbd_libdrizzle_column_read(ngx_dbd_t *dbd)
 {
     drizzle_return_t           rv;
-    drizzle_column_st         *column;
     ngx_dbd_libdrizzle_ctx_t  *ctx;
 
     ngx_log_debug0(NGX_LOG_DEBUG_MYSQL, dbd->log, 0,
@@ -744,25 +749,31 @@ ngx_dbd_libdrizzle_column_read(ngx_dbd_t *dbd)
     ctx = dbd->ctx;
     rv = DRIZZLE_RETURN_OK;
 
-    column = drizzle_column_read(&ctx->res, &ctx->col, &rv);
+    if (ctx->col != NULL && ctx->col_done) {
+        drizzle_column_free(ctx->col);
+    }
+
+    ctx->col = drizzle_column_read(ctx->res, NULL, &rv);
 
     if (rv == DRIZZLE_RETURN_IO_WAIT) {
+        ctx->col_done = 0;
         return NGX_AGAIN;
     }
 
     if (rv != DRIZZLE_RETURN_OK) {
         ngx_log_error(NGX_LOG_ALERT, dbd->log, 0,
                       "drizzle_column_read() failed (%d: %s)",
-                      drizzle_con_errno(&ctx->con),
-                      drizzle_con_error(&ctx->con));
+                      drizzle_con_errno(ctx->con), drizzle_con_error(ctx->con));
         return NGX_ERROR;
     }
 
     /* rv == DRIZZLE_RETURN_OK */
 
-    if (column == NULL) {
+    if (ctx->col == NULL) {
         return NGX_DONE;
     }
+
+    ctx->col_done = 1;
 
     return NGX_OK;
 }
@@ -778,7 +789,7 @@ ngx_dbd_libdrizzle_column_catalog(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return (u_char *) drizzle_column_catalog(&ctx->col);
+    return (u_char *) drizzle_column_catalog(ctx->col);
 }
 
 
@@ -792,7 +803,7 @@ ngx_dbd_libdrizzle_column_db(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return (u_char *) drizzle_column_db(&ctx->col);
+    return (u_char *) drizzle_column_db(ctx->col);
 }
 
 
@@ -806,7 +817,7 @@ ngx_dbd_libdrizzle_column_table(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return (u_char *) drizzle_column_table(&ctx->col);
+    return (u_char *) drizzle_column_table(ctx->col);
 }
 
 
@@ -820,7 +831,7 @@ ngx_dbd_libdrizzle_column_orig_table(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return (u_char *) drizzle_column_orig_table(&ctx->col);
+    return (u_char *) drizzle_column_orig_table(ctx->col);
 }
 
 
@@ -834,7 +845,7 @@ ngx_dbd_libdrizzle_column_name(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return (u_char *) drizzle_column_name(&ctx->col);
+    return (u_char *) drizzle_column_name(ctx->col);
 }
 
 
@@ -848,7 +859,7 @@ ngx_dbd_libdrizzle_column_orig_name(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return (u_char *) drizzle_column_orig_name(&ctx->col);
+    return (u_char *) drizzle_column_orig_name(ctx->col);
 }
 
 
@@ -862,7 +873,7 @@ ngx_dbd_libdrizzle_column_charset(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return drizzle_column_charset(&ctx->col);
+    return drizzle_column_charset(ctx->col);
 }
 
 
@@ -876,7 +887,7 @@ ngx_dbd_libdrizzle_column_size(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return drizzle_column_size(&ctx->col);
+    return drizzle_column_size(ctx->col);
 }
 
 
@@ -890,7 +901,7 @@ ngx_dbd_libdrizzle_column_max_size(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return drizzle_column_max_size(&ctx->col);
+    return drizzle_column_max_size(ctx->col);
 }
 
 
@@ -904,7 +915,7 @@ ngx_dbd_libdrizzle_column_type(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return drizzle_column_type(&ctx->col);
+    return drizzle_column_type(ctx->col);
 }
 
 
@@ -918,7 +929,7 @@ ngx_dbd_libdrizzle_column_flags(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return drizzle_column_flags(&ctx->col);
+    return drizzle_column_flags(ctx->col);
 }
 
 
@@ -932,7 +943,7 @@ ngx_dbd_libdrizzle_column_decimals(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
 
-    return drizzle_column_decimals(&ctx->col);
+    return drizzle_column_decimals(ctx->col);
 }
 
 
@@ -946,7 +957,7 @@ ngx_dbd_libdrizzle_column_default_value(ngx_dbd_t *dbd, size_t *len)
 
     ctx = dbd->ctx;
 
-    return (void *) drizzle_column_default_value(&ctx->col, len);
+    return (void *) drizzle_column_default_value(ctx->col, len);
 }
 
 
@@ -956,7 +967,9 @@ ngx_dbd_libdrizzle_row_buffer(ngx_dbd_t *dbd)
     ngx_log_debug0(NGX_LOG_DEBUG_MYSQL, dbd->log, 0,
                    "dbd libdrizzle row buffer");
 
-    /* TODO: */
+    /* drizzle_row_buffer */
+
+    /* drizzle_row_free */
 
     return NGX_DECLINED;
 }
@@ -974,7 +987,7 @@ ngx_dbd_libdrizzle_row_read(ngx_dbd_t *dbd)
     ctx = dbd->ctx;
     rv = DRIZZLE_RETURN_OK;
 
-    row_num = drizzle_row_read(&ctx->res, &rv);
+    row_num = drizzle_row_read(ctx->res, &rv);
 
     if (rv == DRIZZLE_RETURN_IO_WAIT) {
         return NGX_AGAIN;
@@ -983,8 +996,7 @@ ngx_dbd_libdrizzle_row_read(ngx_dbd_t *dbd)
     if (rv != DRIZZLE_RETURN_OK) {
         ngx_log_error(NGX_LOG_ALERT, dbd->log, 0,
                       "drizzle_row_read() failed (%d: %s)",
-                      drizzle_con_errno(&ctx->con),
-                      drizzle_con_error(&ctx->con));
+                      drizzle_con_errno(ctx->con), drizzle_con_error(ctx->con));
         return NGX_ERROR;
     }
 
@@ -1004,7 +1016,9 @@ ngx_dbd_libdrizzle_field_buffer(ngx_dbd_t *dbd)
     ngx_log_debug0(NGX_LOG_DEBUG_MYSQL, dbd->log, 0,
                    "dbd libdrizzle field buffer");
 
-    /* TODO: */
+    /* drizzle_field_buffer */
+
+    /* drizzle_field_free */
 
     return NGX_DECLINED;
 }
@@ -1024,7 +1038,7 @@ ngx_dbd_libdrizzle_field_read(ngx_dbd_t *dbd, u_char **value, off_t *offset,
     ctx = dbd->ctx;
     rv = DRIZZLE_RETURN_OK;
 
-    field = drizzle_field_read(&ctx->res, (size_t *) offset, size, total, &rv);
+    field = drizzle_field_read(ctx->res, (size_t *) offset, size, total, &rv);
 
     if (rv == DRIZZLE_RETURN_IO_WAIT) {
         return NGX_AGAIN;
@@ -1037,14 +1051,15 @@ ngx_dbd_libdrizzle_field_read(ngx_dbd_t *dbd, u_char **value, off_t *offset,
     if (rv != DRIZZLE_RETURN_OK) {
         ngx_log_error(NGX_LOG_ALERT, dbd->log, 0,
                       "drizzle_field_read() failed (%d: %s)",
-                      drizzle_con_errno(&ctx->con),
-                      drizzle_con_error(&ctx->con));
+                      drizzle_con_errno(ctx->con), drizzle_con_error(ctx->con));
         return NGX_ERROR;
     }
 
     /* rv == DRIZZLE_RETURN_OK */
 
     *value = (u_char *) field;
+
+    /* drizzle_field_free */
 
     return NGX_OK;
 }
@@ -1074,7 +1089,7 @@ ngx_dbd_libdrizzle_read_event_handler(ngx_event_t *rev)
         revents = POLLIN;
     }
 
-    drizzle_con_set_revents(&ctx->con, revents);
+    drizzle_con_set_revents(ctx->con, revents);
 
     if (dbd->handler != NULL) {
         dbd->handler(dbd->data);
@@ -1106,7 +1121,7 @@ ngx_dbd_libdrizzle_write_event_handler(ngx_event_t *wev)
         revents = POLLOUT;
     }
 
-    drizzle_con_set_revents(&ctx->con, revents);
+    drizzle_con_set_revents(ctx->con, revents);
 
     if (dbd->handler != NULL) {
         dbd->handler(dbd->data);
@@ -1129,8 +1144,8 @@ ngx_dbd_libdrizzle_get_peer(ngx_peer_connection_t *pc, void *data)
 
     ctx = dbd->ctx;
 
-    pc->sockaddr = ctx->con.addrinfo_next->ai_addr;
-    pc->socklen = ctx->con.addrinfo_next->ai_addrlen;
+    pc->sockaddr = ctx->con->addrinfo_next->ai_addr;
+    pc->socklen = ctx->con->addrinfo_next->ai_addrlen;
 
     pc->name = ngx_palloc(dbd->pool, sizeof(ngx_str_t));
     if (pc->name == NULL) {
@@ -1144,7 +1159,7 @@ ngx_dbd_libdrizzle_get_peer(ngx_peer_connection_t *pc, void *data)
         return NGX_ERROR;
     }
 
-    len = ngx_sock_ntop(ctx->con.addrinfo_next->ai_addr, p, len, 1);
+    len = ngx_sock_ntop(ctx->con->addrinfo_next->ai_addr, p, len, 1);
 
     pc->name->len = len;
     pc->name->data = p;
