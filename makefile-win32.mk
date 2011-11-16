@@ -32,7 +32,7 @@ CONF_ARGS= \
 	--without-http_uwsgi_module \
 	--without-http_scgi_module \
 	--without-http_memcached_module \
-	--without-http_limit_zone_module \
+	--without-http_limit_conn_module \
 	--without-http_limit_req_module \
 	--without-http_empty_gif_module \
 	--without-http_browser_module \
