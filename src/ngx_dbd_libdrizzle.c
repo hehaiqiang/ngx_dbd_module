@@ -1036,7 +1036,7 @@ ngx_dbd_libdrizzle_field_buffer(ngx_dbd_t *dbd, u_char **value, size_t *size)
 
     if (rv != DRIZZLE_RETURN_OK) {
         ngx_log_error(NGX_LOG_ALERT, dbd->log, 0,
-                      "drizzle_field_read() failed (%d: %s)",
+                      "drizzle_field_buffer() failed (%d: %s)",
                       drizzle_con_errno(ctx->con), drizzle_con_error(ctx->con));
         return NGX_ERROR;
     }
