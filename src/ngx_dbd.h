@@ -93,7 +93,7 @@ struct ngx_dbd_driver_s {
     ngx_int_t  (*row_buffer)(ngx_dbd_t *dbd);
     ngx_int_t  (*row_read)(ngx_dbd_t *dbd);
 
-    ngx_int_t  (*field_buffer)(ngx_dbd_t *dbd);
+    ngx_int_t  (*field_buffer)(ngx_dbd_t *dbd, u_char **value, size_t *size);
     ngx_int_t  (*field_read)(ngx_dbd_t *dbd, u_char **value, off_t *offset,
                              size_t *size, size_t *total);
 };
@@ -158,7 +158,8 @@ ngx_dbd_t *ngx_dbd_create(ngx_pool_t *pool, ngx_log_t *log, u_char *name);
 #define ngx_dbd_row_buffer(dbd)            (dbd)->drv->row_buffer(dbd)
 #define ngx_dbd_row_read(dbd)              (dbd)->drv->row_read(dbd)
 
-#define ngx_dbd_field_buffer(dbd)          (dbd)->drv->field_buffer(dbd)
+#define ngx_dbd_field_buffer(dbd, value, size)                                 \
+    (dbd)->drv->field_buffer(dbd, value, size)
 #define ngx_dbd_field_read(dbd, value, offset, size, total)                    \
     (dbd)->drv->field_read(dbd, value, offset, size, total)
 

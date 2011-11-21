@@ -69,7 +69,8 @@ static int ngx_dbd_sqlite3_column_decimals(ngx_dbd_t *dbd);
 static void *ngx_dbd_sqlite3_column_default_value(ngx_dbd_t *dbd, size_t *len);
 static ngx_int_t ngx_dbd_sqlite3_row_buffer(ngx_dbd_t *dbd);
 static ngx_int_t ngx_dbd_sqlite3_row_read(ngx_dbd_t *dbd);
-static ngx_int_t ngx_dbd_sqlite3_field_buffer(ngx_dbd_t *dbd);
+static ngx_int_t ngx_dbd_sqlite3_field_buffer(ngx_dbd_t *dbd, u_char **value,
+    size_t *size);
 static ngx_int_t ngx_dbd_sqlite3_field_read(ngx_dbd_t *dbd, u_char **value,
     off_t *offset, size_t *size, size_t *total);
 
@@ -762,12 +763,21 @@ ngx_dbd_sqlite3_row_read(ngx_dbd_t *dbd)
 
 
 static ngx_int_t
-ngx_dbd_sqlite3_field_buffer(ngx_dbd_t *dbd)
+ngx_dbd_sqlite3_field_buffer(ngx_dbd_t *dbd, u_char **value, size_t *size)
 {
+    ngx_dbd_sqlite3_ctx_t  *ctx;
+
     ngx_log_debug0(NGX_LOG_DEBUG_MYSQL, dbd->log, 0,
                    "dbd sqlite3 field buffer");
 
-    /* TODO: */
+    ctx = dbd->ctx;
+
+    if (++ctx->cur_col == sqlite3_column_count(ctx->stmt)) {
+        return NGX_DONE;
+    }
+
+    *value = (u_char *) sqlite3_column_text(ctx->stmt, ctx->cur_col);
+    *size = sqlite3_column_bytes(ctx->stmt, ctx->cur_col);
 
     return NGX_OK;
 }

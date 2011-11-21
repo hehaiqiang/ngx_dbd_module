@@ -92,7 +92,8 @@ static void *ngx_dbd_libdrizzle_column_default_value(ngx_dbd_t *dbd,
     size_t *len);
 static ngx_int_t ngx_dbd_libdrizzle_row_buffer(ngx_dbd_t *dbd);
 static ngx_int_t ngx_dbd_libdrizzle_row_read(ngx_dbd_t *dbd);
-static ngx_int_t ngx_dbd_libdrizzle_field_buffer(ngx_dbd_t *dbd);
+static ngx_int_t ngx_dbd_libdrizzle_field_buffer(ngx_dbd_t *dbd, u_char **value,
+    size_t *size);
 static ngx_int_t ngx_dbd_libdrizzle_field_read(ngx_dbd_t *dbd, u_char **value,
     off_t *offset, size_t *size, size_t *total);
 
@@ -1011,16 +1012,42 @@ ngx_dbd_libdrizzle_row_read(ngx_dbd_t *dbd)
 
 
 static ngx_int_t
-ngx_dbd_libdrizzle_field_buffer(ngx_dbd_t *dbd)
+ngx_dbd_libdrizzle_field_buffer(ngx_dbd_t *dbd, u_char **value, size_t *size)
 {
+    drizzle_field_t            field;
+    drizzle_return_t           rv;
+    ngx_dbd_libdrizzle_ctx_t  *ctx;
+
     ngx_log_debug0(NGX_LOG_DEBUG_MYSQL, dbd->log, 0,
                    "dbd libdrizzle field buffer");
 
-    /* drizzle_field_buffer */
+    ctx = dbd->ctx;
+    rv = DRIZZLE_RETURN_OK;
+
+    field = drizzle_field_buffer(ctx->res, size, &rv);
+
+    if (rv == DRIZZLE_RETURN_IO_WAIT) {
+        return NGX_AGAIN;
+    }
+
+    if (rv == DRIZZLE_RETURN_ROW_END) {
+        return NGX_DONE;
+    }
+
+    if (rv != DRIZZLE_RETURN_OK) {
+        ngx_log_error(NGX_LOG_ALERT, dbd->log, 0,
+                      "drizzle_field_read() failed (%d: %s)",
+                      drizzle_con_errno(ctx->con), drizzle_con_error(ctx->con));
+        return NGX_ERROR;
+    }
+
+    /* rv == DRIZZLE_RETURN_OK */
+
+    *value = (u_char *) field;
 
     /* drizzle_field_free */
 
-    return NGX_DECLINED;
+    return NGX_OK;
 }
 
 
