@@ -741,6 +741,7 @@ ngx_dbd_libdrizzle_column_buffer(ngx_dbd_t *dbd)
 static ngx_int_t
 ngx_dbd_libdrizzle_column_read(ngx_dbd_t *dbd)
 {
+    uint64_t                   n;
     drizzle_return_t           rv;
     ngx_dbd_libdrizzle_ctx_t  *ctx;
 
@@ -752,6 +753,11 @@ ngx_dbd_libdrizzle_column_read(ngx_dbd_t *dbd)
 
     if (ctx->col != NULL && ctx->col_done) {
         drizzle_column_free(ctx->col);
+    }
+
+    n = drizzle_result_column_count(ctx->res);
+    if (n == 0) {
+        return NGX_DONE;
     }
 
     ctx->col = drizzle_column_read(ctx->res, NULL, &rv);
@@ -979,7 +985,7 @@ ngx_dbd_libdrizzle_row_buffer(ngx_dbd_t *dbd)
 static ngx_int_t
 ngx_dbd_libdrizzle_row_read(ngx_dbd_t *dbd)
 {
-    uint64_t                   row_num;
+    uint64_t                   n, row_num;
     drizzle_return_t           rv;
     ngx_dbd_libdrizzle_ctx_t  *ctx;
 
@@ -987,6 +993,11 @@ ngx_dbd_libdrizzle_row_read(ngx_dbd_t *dbd)
 
     ctx = dbd->ctx;
     rv = DRIZZLE_RETURN_OK;
+
+    n = drizzle_result_column_count(ctx->res);
+    if (n == 0) {
+        return NGX_DONE;
+    }
 
     row_num = drizzle_row_read(ctx->res, &rv);
 
