@@ -89,7 +89,8 @@ static int ngx_dbd_freetds_column_decimals(ngx_dbd_t *dbd);
 static void *ngx_dbd_freetds_column_default_value(ngx_dbd_t *dbd, size_t *len);
 static ngx_int_t ngx_dbd_freetds_row_buffer(ngx_dbd_t *dbd);
 static ngx_int_t ngx_dbd_freetds_row_read(ngx_dbd_t *dbd);
-static ngx_int_t ngx_dbd_freetds_field_buffer(ngx_dbd_t *dbd);
+static ngx_int_t ngx_dbd_freetds_field_buffer(ngx_dbd_t *dbd, u_char **value,
+    size_t *size);
 static ngx_int_t ngx_dbd_freetds_field_read(ngx_dbd_t *dbd, u_char **value,
     off_t *offset, size_t *size, size_t *total);
 
@@ -892,12 +893,42 @@ ngx_dbd_freetds_row_read(ngx_dbd_t *dbd)
 
 
 static ngx_int_t
-ngx_dbd_freetds_field_buffer(ngx_dbd_t *dbd)
+ngx_dbd_freetds_field_buffer(ngx_dbd_t *dbd, u_char **value, size_t *size)
 {
+    ngx_dbd_freetds_ctx_t  *ctx;
+
     ngx_log_debug0(NGX_LOG_DEBUG_MYSQL, dbd->log, 0,
                    "dbd freetds field buffer");
 
-    return NGX_DECLINED;
+    ctx = dbd->ctx;
+
+    if (ctx->cur_col++ == ctx->num_fields) {
+        return NGX_DONE;
+    }
+
+    /* dbcollen(ctx->db, ctx->cur_col) */
+
+    /* dbvarylen(ctx->db, ctx->cur_col) */
+
+    /* dbcoltype(ctx->db, ctx->cur_col) */
+
+    /* dbcolutype */
+
+    /* dbcoltypeinfo */
+
+    /* dbcolinfo */
+
+    /* dbcolsource */
+
+    /* dbtablecolinfo */
+
+    /* dbwillconvert */
+    /* dbconvert */
+
+    *value = dbdata(ctx->db, (INT) ctx->cur_col);
+    *size = dbdatlen(ctx->db, (INT) ctx->cur_col);
+
+    return NGX_OK;
 }
 
 
